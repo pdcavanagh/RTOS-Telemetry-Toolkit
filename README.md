@@ -26,6 +26,19 @@ Sandbox for running FreeRTOS locally and exchanging telemetry/telecommands with 
    ```bash
    cd host 
    python telemetry_decoder.py
+
+   Enter the serial port (e.g., /dev/ttys005 or COM3): /dev/ttysXXX
+
+   Opening serial port /dev/ttys003...
+   Listening for CCSDS packets on /dev/ttys003...
+   Decoded CCSDS Packet:
+     Packet ID: 4097
+     Sequence Control: 49159
+     Packet Length: 15
+     Temperature (C): 20.700000762939453
+     Pressure (Pa): 1016.75
+     Battery Voltage (V): 3.7699999809265137
+     Timestamp (s): 7001
    ```
 
 ## License
