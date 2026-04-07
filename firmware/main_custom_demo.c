@@ -1,11 +1,14 @@
-#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <FreeRTOS.h>
 #include <task.h>
 
 /* Configuration */
-#define EMIT_PERIOD_MS      200
+#define EMIT_PERIOD_MS      1000
 #define PACKET_ID           0x1001  /* example APID (11 bits typically) */
 #define MAX_PAYLOAD_SIZE    32
 
@@ -16,6 +19,32 @@
      - [4..5] Packet Length (16 bits) -> length of payload-1
 */
 static uint16_t seq_counter = 0;
+int master_fd;
+char *slave_name = NULL;
+
+/* Setup Serial Port for communication */
+static void setup_virtual_serial_port(void) {
+    printf("Setting up virtual serial port...\n");
+    master_fd = posix_openpt( O_RDWR | O_NOCTTY );
+    if (master_fd < 0) {
+        perror("posix_openpt");
+        exit(EXIT_FAILURE);
+    }
+    if (grantpt(master_fd) != 0) {
+        perror("grantpt");
+        exit(EXIT_FAILURE);
+    }
+    if (unlockpt(master_fd) != 0) {
+        perror("unlockpt");
+        exit(EXIT_FAILURE);
+    }
+    slave_name = ptsname(master_fd);
+    if (!slave_name) {
+        perror("ptsname");
+        exit(EXIT_FAILURE);
+    }
+    printf("Virtual serial port created: %s\n", slave_name);   
+}
 
 /* Helper: write 16-bit big-endian */
 static void write_u16_be(uint8_t *buf, uint16_t v) {
@@ -86,6 +115,10 @@ static void emit_packet(uint16_t seq) {
 
     size_t total_len = 6 + payload_len;
 
+    /* Transmit packet to the virtual serial port */
+    const char *test_msg = "Serial port test message\n";
+    ssize_t n = write(master_fd, packet, total_len);
+
     /* Print hex bytes */
     for (size_t i = 0; i < total_len; ++i) {
         printf("%02X", packet[i]);
@@ -120,6 +153,9 @@ static void vEmitterTask(void *pvParameters) {
 }
 
 int main_custom_demo(void) {
+    printf("Starting custom demo: CCSDS-like packet emitter\n");
+    setup_virtual_serial_port();
+ 
     /* Create emitter task */
     xTaskCreate(vEmitterTask, "Emitter", configMINIMAL_STACK_SIZE + 256, NULL, tskIDLE_PRIORITY + 1, NULL);
 

@@ -1,6 +1,7 @@
 import sys
 import binascii
 import struct
+import serial
 
 def parse_ccsds_packet(packet_bytes):
     if len(packet_bytes) < 6:
@@ -25,36 +26,79 @@ def parse_ccsds_packet(packet_bytes):
     }
 
 def parse_data_field(data_field):
-    # This function can be expanded to parse specific data formats based on the application
-    # For demonstration, we will just return the data field as a hex string
-
+    # Match CCSDS structure: temperature, pressure, battery, timestamp (all big-endian)
     temperature = struct.unpack(">f", data_field[0:4])[0]
-    battery_voltage = struct.unpack(">f", data_field[4:8])[0]
-    pressure = struct.unpack(">f", data_field[8:12])[0]
+    pressure = struct.unpack(">f", data_field[4:8])[0]
+    battery_voltage = struct.unpack(">f", data_field[8:12])[0]
     timestamp = struct.unpack(">I", data_field[12:16])[0]
 
     return {
         "Temperature (C)": temperature,
-        "Battery Voltage (V)": battery_voltage,
         "Pressure (Pa)": pressure,
+        "Battery Voltage (V)": battery_voltage,
         "Timestamp (s)": timestamp
     }
 
 def main():
-    print("Enter CCSDS packet as hex string (e.g., '080100010003DEADBEEF'):")
-    for line in sys.stdin:
-        hex_str = line.strip().replace(" ", "")
-        if not hex_str:
-            continue
-        try:
-            packet_bytes = binascii.unhexlify(hex_str)
-            result = parse_ccsds_packet(packet_bytes)
-            print("Decoded CCSDS Packet:")
-            for k, v in result.items():
-                print(f"  {k}: {v}")
-        except Exception as e:
-            print(f"Error decoding packet: {e}")
-        print("\nEnter another CCSDS packet as hex string, or Ctrl+D to exit:")
+    port = input("Enter the serial port (e.g., /dev/ttys005 or COM3): ").strip()
+    if not port:
+        print("No serial port provided. Exiting.")
+        sys.exit(1)
+
+    try:
+        print(f"Opening serial port {port}...")
+        ser = serial.Serial(port, baudrate=115200, timeout=1)
+    except serial.SerialException as e:
+        print(f"Error opening serial port: {e}")
+        sys.exit(1)
+
+    print(f"Listening for CCSDS packets on {ser.port}...")
+
+    try:
+        while True:
+            try:
+                # Read CCSDS primary header (6 bytes)
+                header = ser.read(6)
+                if len(header) < 6:
+                    continue  # Incomplete header, skip
+                # Unpack header
+                packet_id = struct.unpack('>H', header[0:2])[0]
+                seq_ctrl = struct.unpack('>H', header[2:4])[0]
+                pkt_len = struct.unpack('>H', header[4:6])[0]
+                # CCSDS: pkt_len is (payload_len - 1)
+                payload_len = pkt_len + 1
+                # Read payload
+                payload = ser.read(payload_len)
+                if len(payload) < payload_len:
+                    continue  # Incomplete payload, skip
+                packet_bytes = header + payload
+                result = parse_ccsds_packet(packet_bytes)
+                print("Decoded CCSDS Packet:")
+                for k, v in result.items():
+                    print(f"  {k}: {v}")
+            except Exception as e:
+                print(f"Error decoding packet: {e}")
+    except (EOFError, KeyboardInterrupt):
+        print("\nExiting.")
+        ser.close()
+        sys.exit(0)
+
+    # !!!
+    # Manual input mode (for testing without serial port)
+    # !!!
+    # for line in sys.stdin:
+    #     hex_str = line.strip().replace(" ", "")
+    #     if not hex_str:
+    #         continue
+    #     try:
+    #         packet_bytes = binascii.unhexlify(hex_str)
+    #         result = parse_ccsds_packet(packet_bytes)
+    #         print("Decoded CCSDS Packet:")
+    #         for k, v in result.items():
+    #             print(f"  {k}: {v}")
+    #     except Exception as e:
+    #         print(f"Error decoding packet: {e}")
+    #     print("\nEnter another CCSDS packet as hex string, or Ctrl+D to exit:")
 
 if __name__ == "__main__":
     main()
