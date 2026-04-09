@@ -6,11 +6,14 @@
 #include <string.h>
 #include <FreeRTOS.h>
 #include <task.h>
+#include <queue.h>
 
 /* Configuration */
-#define EMIT_PERIOD_MS      1000
+#define EMIT_PERIOD_MS      10000
 #define PACKET_ID           0x1001  /* example APID (11 bits typically) */
 #define MAX_PAYLOAD_SIZE    32
+
+#define TC_ID_HOUSEKEEPING_REQUEST 0x01
 
 /* Simple CCSDS-like header (not full spec): 
    Primary header (fixed 6 bytes):
@@ -21,6 +24,7 @@
 static uint16_t seq_counter = 0;
 int master_fd;
 char *slave_name = NULL;
+QueueHandle_t xTcQueue;
 
 /* Setup Serial Port for communication */
 static void setup_virtual_serial_port(void) {
@@ -152,12 +156,55 @@ static void vEmitterTask(void *pvParameters) {
     }
 }
 
+static void vReceiveTelecommandTask(void *pvParameters) {
+    for (;;) {
+        uint8_t buf[64];
+        ssize_t n = read(master_fd, buf, sizeof(buf));
+        if (n > 0) {
+            printf("Telecommand RX (%zd bytes): ", n);
+            for (ssize_t i = 0; i < n; ++i) {
+                printf("%02X ", buf[i]);
+            }
+            printf("\n");
+            fflush(stdout);
+
+            xQueueSend(xTcQueue, buf, portMAX_DELAY);
+        }
+    }
+}
+
+/* todo */
+static void vProcessTelecommand(void *pvParameters) {
+    uint8_t tc_buf[64];
+    while (xQueueReceive(xTcQueue, &tc_buf, portMAX_DELAY) == pdPASS) {
+        /* Print telecommand as hex bytes */
+        printf("Processing telecommand: ");
+        for (int i = 0; i < 64; ++i) {
+            printf("%02X ", tc_buf[i]);
+        }
+        printf("\n");
+        fflush(stdout);
+    }
+}
+
 int main_custom_demo(void) {
+    xTcQueue = xQueueCreate(10, sizeof(uint8_t) * 64);
+    if (xTcQueue == NULL) {
+        printf("Failed to create telecommand queue\n");
+        return -1;
+    }
+
     printf("Starting custom demo: CCSDS-like packet emitter\n");
     setup_virtual_serial_port();
  
     /* Create emitter task */
     xTaskCreate(vEmitterTask, "Emitter", configMINIMAL_STACK_SIZE + 256, NULL, tskIDLE_PRIORITY + 1, NULL);
+
+    /* Create telecommand task */
+    xTaskCreate(vReceiveTelecommandTask, "Telecommand", configMINIMAL_STACK_SIZE + 256, NULL, tskIDLE_PRIORITY + 2, NULL);
+
+    // Processing task for telecommands (not fully implemented)
+    xTaskCreate(vProcessTelecommand, "ProcessTC", configMINIMAL_STACK_SIZE + 256, NULL, tskIDLE_PRIORITY + 3, NULL);
 
     /* Start scheduler (POSIX port provides pthread-based scheduler) */
     vTaskStartScheduler();

@@ -42,19 +42,26 @@ def main():
         '2': {'name': 'Custom Command 2', 'id': 2, 'payload': b'\x02'}
     }
 
-    print("Available telecommands:")
-    for key, tc in telecommands.items():
-        print(f"  {key}: {tc['name']} (TC ID: {tc['id']})")
+    telecommands['q'] = {'name': 'Quit', 'id': None, 'payload': None}
+    while True:
+        print("\nAvailable telecommands:")
+        for key, tc in telecommands.items():
+            if key == 'q':
+                print(f"  {key}: Quit program")
+            else:
+                print(f"  {key}: {tc['name']} (TC ID: {tc['id']})")
 
-    choice = input("Select telecommand to send: ")
-    if choice not in telecommands:
-        print("Invalid choice.")
-        sys.exit(1)
-
-    tc = telecommands[choice]
-    send_telecommand(ser, tc['id'], tc['payload'])
+        choice = input("Select telecommand to send (or 'q' to quit): ")
+        if choice == 'q':
+            print("Exiting program.")
+            break
+        if choice not in telecommands or choice == 'q':
+            print("Invalid choice.")
+            continue
+        tc = telecommands[choice]
+        send_telecommand(ser, tc['id'], tc['payload'])
     ser.close()
-    print("Telecommand sent and serial port closed.")
+    print("Serial port closed.")
 
 if __name__ == "__main__":
     main()
