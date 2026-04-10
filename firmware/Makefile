@@ -27,6 +27,7 @@ INCLUDE_DIRS          += -I${FREERTOS_PLUS_DIR}/Source/FreeRTOS-Plus-Trace/kerne
 
 SOURCE_FILES          := $(wildcard *.c)
 SOURCE_FILES          += $(wildcard ${FREERTOS_DIR}/Source/*.c)
+SOURCE_FILES          += $(wildcard telemetry/*.c)
 # Memory manager (use malloc() / free() )
 SOURCE_FILES          += ${KERNEL_DIR}/portable/MemMang/heap_3.c
 # posix port
