@@ -9,11 +9,11 @@
 #include <task.h>
 #include <queue.h>
 #include "telemetry/telemetry.h"
+#include "telecommands/telecommands.h"
 
 int master_fd = -1;
-
 char *slave_name = NULL;
-QueueHandle_t xTcQueue;
+QueueHandle_t xTcQueue = NULL;
 
 /* Setup Serial Port for communication */
 static void setup_virtual_serial_port(void) {
@@ -39,38 +39,6 @@ static void setup_virtual_serial_port(void) {
     printf("Virtual serial port created: %s\n", slave_name);   
 }
 
-// TODO: Make master_fd non-blocking or add timeout to avoid blocking the scheduler in vReceiveTelecommandTask.
-static void vReceiveTelecommandTask(void *pvParameters) {
-    for (;;) {
-        uint8_t buf[64];
-        ssize_t n = read(master_fd, buf, sizeof(buf));
-        if (n > 0) {
-            printf("Telecommand RX (%zd bytes): ", n);
-            for (ssize_t i = 0; i < n; ++i) {
-                printf("%02X ", buf[i]);
-            }
-            printf("\n");
-            fflush(stdout);
-
-            xQueueSend(xTcQueue, buf, portMAX_DELAY);
-        }
-    }
-}
-
-/* todo */
-static void vProcessTelecommand(void *pvParameters) {
-    uint8_t tc_buf[64];
-    while (xQueueReceive(xTcQueue, &tc_buf, portMAX_DELAY) == pdPASS) {
-        /* Print telecommand as hex bytes */
-        printf("Processing telecommand: ");
-        for (int i = 0; i < 64; ++i) {
-            printf("%02X ", tc_buf[i]);
-        }
-        printf("\n");
-        fflush(stdout);
-    }
-}
-
 int main_custom_demo(void) {
     xTcQueue = xQueueCreate(10, sizeof(uint8_t) * 64);
     if (xTcQueue == NULL) {
@@ -82,10 +50,10 @@ int main_custom_demo(void) {
     setup_virtual_serial_port();
  
     /* Create emitter task */
-    xTaskCreate(vEmitterTask, "Emitter", configMINIMAL_STACK_SIZE + 256, NULL, tskIDLE_PRIORITY + 1, NULL);
+    // xTaskCreate(vEmitterTask, "Emitter", configMINIMAL_STACK_SIZE + 256, NULL, tskIDLE_PRIORITY + 1, NULL);
 
     /* Create telecommand task */
-    // xTaskCreate(vReceiveTelecommandTask, "Telecommand", configMINIMAL_STACK_SIZE + 256, NULL, tskIDLE_PRIORITY + 2, NULL);
+    xTaskCreate(vReceiveTelecommandTask, "Telecommand", configMINIMAL_STACK_SIZE + 256, NULL, tskIDLE_PRIORITY + 2, NULL);
 
     // Processing task for telecommands (not fully implemented)
     xTaskCreate(vProcessTelecommand, "ProcessTC", configMINIMAL_STACK_SIZE + 256, NULL, tskIDLE_PRIORITY + 3, NULL);
